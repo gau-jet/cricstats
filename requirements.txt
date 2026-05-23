@@ -1,3 +1,4 @@
+# Install latest compatible releases; retrain *.pkl after upgrading sklearn or xgboost.
 numpy
 pandas
 scikit-learn

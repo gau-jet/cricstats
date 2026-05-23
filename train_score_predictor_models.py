@@ -80,7 +80,9 @@ def build_training_data(deliveries_path, matches_path, apply_mapping=False):
 
     grouped = del_df.groupby(["id", "inning"], sort=False)
     del_df["current_score"] = grouped["total_runs"].cumsum()
-    del_df["current_wickets"] = grouped["is_wicket"].fillna(0).astype(int).cumsum()
+    del_df["current_wickets"] = grouped["is_wicket"].transform(
+        lambda s: s.fillna(0).astype(int).cumsum()
+    )
     del_df["overs"] = (del_df["over"] - 1) + del_df["ball"] / 6.0
     del_df["is_dot"] = (del_df["total_runs"] == 0).astype(int)
     del_df["is_boundary"] = (del_df["batsman_runs"] >= 4).astype(int)
@@ -89,8 +91,8 @@ def build_training_data(deliveries_path, matches_path, apply_mapping=False):
     del_df["prev_30_runs"] = grouped["total_runs"].transform(
         lambda series: series.rolling(30, min_periods=1).sum()
     )
-    del_df["prev_30_wickets"] = grouped["is_wicket"].fillna(0).transform(
-        lambda series: series.rolling(30, min_periods=1).sum()
+    del_df["prev_30_wickets"] = grouped["is_wicket"].transform(
+        lambda series: series.fillna(0).rolling(30, min_periods=1).sum()
     )
     del_df["prev_30_dot_balls"] = grouped["is_dot"].transform(
         lambda series: series.rolling(30, min_periods=1).sum()
