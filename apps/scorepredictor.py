@@ -1,35 +1,34 @@
-import streamlit as st
 import pickle
+
 import pandas as pd
-import numpy as np
-from sklearn.linear_model import LinearRegression
-from xgboost import XGBRegressor
+import streamlit as st
+
 from apps import utils
+
+MODEL_PATHS = {
+    "IPL": "data/IPL-Batting-score-xgboost.pkl",
+    "T20I": "data/T20I-Batting-score-xgboost.pkl",
+    "WT20": "data/WT20-Batting-score-xgboost.pkl",
+}
+
+
+@st.cache_resource
+def load_score_model(series):
+    model_path = MODEL_PATHS[series]
+    with open(model_path, "rb") as model_file:
+        return pickle.load(model_file)
+
 
 def app():
     utils.header()
-     
-    def replaceTeamNames(df):
 
-        team_name_mappings = {'Delhi Daredevils':'Delhi Capitals','Deccan Chargers':'Sunrisers Hyderabad','Gujarat Lions':'Gujarat Titans','Kings XI Punjab':'Punjab Kings','Rising Pune Supergiants':'Rising Pune Supergiant','Pune Warriors':'Rising Pune Supergiant'} 
-        
-        for key, value in team_name_mappings.items():
-            df['team1'] = df['team1'].str.replace(key,value)
-            df['team2'] = df['team2'].str.replace(key,value)
-            df['toss_winner'] = df['toss_winner'].str.replace(key,value)
-            df['winner'] = df['winner'].str.replace(key,value)        
-        return df
-    
     deliveres = utils.load_match_data()
     series = utils.getSeries()
-    
-    if series == 'IPL':
-        deliveres=replaceTeamNames(deliveres)
-        rdf_regressor = pickle.load(open('data/IPL-Batting-score-xgboost.pkl','rb'))        
-    elif series == 'T20I':
-        rdf_regressor = pickle.load(open('data/T20I-Batting-score-xgboost.pkl','rb'))
-    elif series == 'WT20':    
-        rdf_regressor = pickle.load(open('data/WT20-Batting-score-xgboost.pkl','rb'))
+
+    if series == "IPL":
+        deliveres = utils.replaceTeamNames(deliveres)
+
+    rdf_regressor = load_score_model(series)
     
     teams = sorted(deliveres['team1'].unique())
     venue = utils.getVenueList(deliveres)   
@@ -72,7 +71,7 @@ def app():
     if st.button('Predict Score'):
     
         input = pd.DataFrame(
-        {'batting_team': [batting_team], 'bowling_team': [bowling_team], 'venue': Venue, 'current_score': [runs],
+        {'batting_team': [batting_team], 'bowling_team': [bowling_team], 'venue': [Venue], 'current_score': [runs],
          'overs': [overs], 'current_wickets': [wickets], 'prev_30_runs': [runs_in_prev_5], 'prev_30_wickets': [wickets_in_prev_5], 'prev_30_dot_balls': [prev_30_dot_balls], 'prev_30_boundaries': [prev_30_boundaries]})
         
         rdf_regressor_score = rdf_regressor.predict(input)
