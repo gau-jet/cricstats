@@ -69,9 +69,9 @@ def return_df(f):
 @st.cache_data(ttl="1d")    
 def return_combined_matchdf(del_df,match_df):        
     try:
-        comb_df = pd.merge(del_df, match_df, on = 'id', how='left')
-        comb_df.rename(columns = {'id':'match_id'}, inplace = True)                  
-        comb_df= replaceTeamNames(comb_df)
+        comb_df = pd.merge(del_df, match_df, on="id", how="left")
+        comb_df = comb_df.rename(columns={"id": "match_id"})
+        comb_df = replaceTeamNames(comb_df)
         return comb_df
     except Exception:
         st.write("Could not combine match and delivery dataframe")
@@ -149,16 +149,22 @@ def getMatchList(df,year,venue):
     return df['match_string']
     
 def replaceTeamNames(df):
-
-    team_name_mappings = {'Delhi Daredevils':'Delhi Capitals','Deccan Chargers':'Sunrisers Hyderabad','Gujarat Lions':'Gujarat Titans','Kings XI Punjab':'Punjab Kings','Rising Pune Supergiants':'Rising Pune Supergiant','Pune Warriors':'Rising Pune Supergiant'} 
-    
-    for key, value in team_name_mappings.items():
-        df['batting_team'] = df['batting_team'].str.replace(key,value)
-        df['bowling_team'] = df['bowling_team'].str.replace(key,value)
-        df['team1'] = df['team1'].str.replace(key,value)
-        df['team2'] = df['team2'].str.replace(key,value)
-        df['toss_winner'] = df['toss_winner'].str.replace(key,value)
-        df['winner'] = df['winner'].str.replace(key,value)
+    df = df.copy()
+    team_name_mappings = {
+        'Delhi Daredevils': 'Delhi Capitals',
+        'Deccan Chargers': 'Sunrisers Hyderabad',
+        'Gujarat Lions': 'Gujarat Titans',
+        'Kings XI Punjab': 'Punjab Kings',
+        'Rising Pune Supergiants': 'Rising Pune Supergiant',
+        'Pune Warriors': 'Rising Pune Supergiant',
+    }
+    team_columns = [
+        'batting_team', 'bowling_team', 'team1', 'team2', 'toss_winner', 'winner',
+    ]
+    for old_name, new_name in team_name_mappings.items():
+        for col in team_columns:
+            if col in df.columns:
+                df[col] = df[col].str.replace(old_name, new_name, regex=False)
     return df
 
 def selectbox_with_default(st,text, values, default, sidebar=False):
@@ -287,44 +293,29 @@ def getPerInningsWinCount(df,venue):
     return final_df
     #st.write(df['TeamBattingFirstWins'])
             
-def getVenueStats(df,venue):
-    
-    avg_run_per_match = pd.DataFrame(df.groupby(['venue','inning']).total_runs.sum() / df.groupby('venue').match_id.nunique()).reset_index()
-    avg_run_per_match.columns = ['venue', 'Inning','AvgRuns']
-    avg_wkt_per_match = pd.DataFrame(df.groupby(['venue','inning']).is_wicket.sum() / df.groupby('venue').match_id.nunique()).reset_index()
-    avg_wkt_per_match.columns = ['venue','Inning', 'AvgWkts']
-    
-    avg_run_per_match.drop(['venue'], axis=1, inplace=True) 
-    avg_run_per_match_transposed = avg_run_per_match.T
-    avg_wk_per_match_transposed = avg_wkt_per_match.T
-    
-    
-    avg_run_per_match_transposed[0]['AvgRuns'] = (round(avg_run_per_match_transposed[0]['AvgRuns'],2))
-    avg_run_per_match_transposed[1]['AvgRuns'] = (round(avg_run_per_match_transposed[1]['AvgRuns'],2))
-    avg_wk_per_match_transposed[0]['AvgWkts'] = (round(avg_wk_per_match_transposed[0]['AvgWkts'],2))
-    avg_wk_per_match_transposed[1]['AvgWkts'] = (round(avg_wk_per_match_transposed[1]['AvgWkts'],2))
-    
-   
-    matches = pd.DataFrame(df.groupby('venue')['match_id'].apply(lambda x: len(list(np.unique(x)))).reset_index()).rename(columns = {'match_id':'NoofMatches'})
-    matches.drop(['venue'], axis=1, inplace=True) 
-    
+def getVenueStats(df, venue):
+    matches_per_venue = df.groupby("venue")["match_id"].nunique()
+
+    avg_runs = (
+        df.groupby(["venue", "inning"])["total_runs"].sum().div(matches_per_venue, level="venue")
+    )
+    avg_wkts = (
+        df.groupby(["venue", "inning"])["is_wicket"].sum().div(matches_per_venue, level="venue")
+    )
+
+    runs_by_inning = avg_runs.xs(venue, level="venue").round(2)
+    wkts_by_inning = avg_wkts.xs(venue, level="venue").round(2)
+
     innings_stats_df = {
-        'venue':[venue],
-        'Matches': matches['NoofMatches'][0],
-        'Avg Runs - 1st Innings': [avg_run_per_match_transposed[0]['AvgRuns']],
-        'Avg Runs - 2nd Innings': [avg_run_per_match_transposed[1]['AvgRuns']],
-        'Avg Wickets - 1st Innings': [avg_wk_per_match_transposed[0]['AvgWkts']],
-        'Avg Wickets - 2nd Innings': [avg_wk_per_match_transposed[1]['AvgWkts']]
-      }
-      
-    final_df = pd.DataFrame(data=innings_stats_df)
-    
-    #final_df = pd.merge(avg_run_per_match , avg_wkt_per_match, on = 'venue')
-    
-    #final_df = pd.merge(final_df , WinPercentage, on = 'venue')
-    #final_df.drop(['venue'], axis=1, inplace=True) 
-    
-    return final_df
+        "venue": [venue],
+        "Matches": [int(matches_per_venue.loc[venue])],
+        "Avg Runs - 1st Innings": [runs_by_inning.get(1, 0)],
+        "Avg Runs - 2nd Innings": [runs_by_inning.get(2, 0)],
+        "Avg Wickets - 1st Innings": [wkts_by_inning.get(1, 0)],
+        "Avg Wickets - 2nd Innings": [wkts_by_inning.get(2, 0)],
+    }
+
+    return pd.DataFrame(data=innings_stats_df)
 
 def getTeamStats(df,team):
     df = df[((df.team1 == team) | (df.team2 == team))]
@@ -352,10 +343,9 @@ def getBowlingStyleWiseStats(df):
     new_df  = pd.DataFrame(df.groupby(['venue','bowling_style']).ball.count()).rename(columns = {'ball' : 'Balls'}).reset_index()
     new_df  = new_df .merge(pd.DataFrame(df.groupby(['venue','bowling_style']).total_runs.sum()).rename(columns = {'total_runs' : 'Runs'}) , on = ['venue', 'bowling_style'])
     new_df  = new_df .merge(pd.DataFrame(df.groupby(['venue','bowling_style']).is_wicket.sum()).rename(columns = {'is_wicket' : 'Wickets'}), on = ['venue', 'bowling_style'])
-    new_df ['BallsPerWicket'] = (round(new_df ['Balls'] / new_df ['Wickets'],2))
-    new_df ['RunsPerOver'] = (round(6 * new_df ['Runs'] / new_df ['Balls'],2))
-    new_df.drop(['venue'], axis=1, inplace=True)
-    new_df.rename(columns = {'bowling_style':'Bowling Style'}, inplace = True)
+    new_df["BallsPerWicket"] = (new_df["Balls"] / new_df["Wickets"]).round(2)
+    new_df["RunsPerOver"] = (6 * new_df["Runs"] / new_df["Balls"]).round(2)
+    new_df = new_df.drop(columns=["venue"]).rename(columns={"bowling_style": "Bowling Style"})
     return new_df
     
     
@@ -549,24 +539,11 @@ def getMatchSummaryChart(df,matches_df,matchID):
     
     df = df[df.id==int(matchID)]
     
-    firstinnings_df = df[df.inning==1]
-    secondinnings_df = df[df.inning==2]
-    
-    firstinnings_df.reset_index(inplace = True, drop = True)
-    secondinnings_df.reset_index(inplace = True, drop = True)
+    firstinnings_df = df[df.inning == 1].reset_index(drop=True)
+    secondinnings_df = df[df.inning == 2].reset_index(drop=True)
 
-    firstinnings_df['cummulative_runs'] = 0
-    secondinnings_df['cummulative_runs'] = 0
-    #Populate runs for both innings
-    total_runs=0
-    for i in range( len(firstinnings_df)):
-        total_runs += firstinnings_df['total_runs'][i]
-        firstinnings_df['cummulative_runs'][i] = total_runs
-
-    total_runs=0
-    for i in range(len(secondinnings_df)):
-        total_runs += secondinnings_df['total_runs'][i]
-        secondinnings_df['cummulative_runs'][i] = total_runs
+    firstinnings_df["cummulative_runs"] = firstinnings_df["total_runs"].cumsum()
+    secondinnings_df["cummulative_runs"] = secondinnings_df["total_runs"].cumsum()
 
 
     #Populate wickets for both innings    
@@ -604,27 +581,25 @@ def getMatchSummaryChart(df,matches_df,matchID):
     st.pyplot(plt)
  
 def getMatchAnanlysis(df,matchid):
-    
-    ipl_df = df[(df.match_id == int(matchid))]
-    
-    ipl_df.reset_index(inplace = True, drop = True)
-    
+
+    ipl_df = df[df.match_id == int(matchid)].reset_index(drop=True)
+
     t1 = ipl_df.team1[0]
     t2 = ipl_df.team2[0]
-    
-    df_ing1 = ipl_df[ipl_df.inning == 1]
-    df_ing2 = ipl_df[ipl_df.inning == 2]
-    df_ing1.reset_index(inplace = True, drop = True)
-    df_ing2.reset_index(inplace = True, drop = True)
-    
+
+    df_ing1 = (
+        ipl_df[ipl_df.inning == 1]
+        .sort_values(by=["over", "ball"], ascending=True)
+        .reset_index(drop=True)
+    )
+    df_ing2 = (
+        ipl_df[ipl_df.inning == 2]
+        .sort_values(by=["over", "ball"], ascending=True)
+        .reset_index(drop=True)
+    )
+
     first_batting_teamname = df_ing1.batting_team[0]
     second_batting_teamname = df_ing2.batting_team[0]
-    #st.write(df_ing1)
-    
-    df_ing1 = df_ing1.sort_values(by=['over','ball'], ascending = True)
-    df_ing2 = df_ing2.sort_values(by=['over','ball'], ascending = True)
-    df_ing1.reset_index(inplace = True, drop = True)
-    df_ing2.reset_index(inplace = True, drop = True)
     
     
     #return

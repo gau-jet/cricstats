@@ -178,20 +178,16 @@ def main():
     parser = argparse.ArgumentParser(description="Retrain Score Predictor models")
     parser.add_argument(
         "--series",
+        action="append",
         choices=list(SERIES_CONFIG.keys()),
         default=None,
-        help="Train one series only (default: all)",
+        help="Train one series; repeat the flag to train several (default: all).",
     )
     args = parser.parse_args()
 
-    series_to_train = (
-        {args.series: SERIES_CONFIG[args.series]}
-        if args.series
-        else SERIES_CONFIG
-    )
-
-    for name, config in series_to_train.items():
-        train_series(name, config)
+    selected = args.series or list(SERIES_CONFIG.keys())
+    for name in selected:
+        train_series(name, SERIES_CONFIG[name])
 
     print("\nDone.")
 
