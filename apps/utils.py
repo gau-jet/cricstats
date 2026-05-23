@@ -1,3 +1,4 @@
+import sys
 import streamlit as st
 import numpy as np 
 import pandas as pd 
@@ -20,9 +21,7 @@ def header():
     st.markdown(snippet, unsafe_allow_html=True)
 
 def getSeries():
-    query_params = st.query_params
-    series = query_params['series']
-    return series
+    return st.query_params.get("series", "IPL")
 
 def load_deliveries_data():
     
@@ -57,12 +56,15 @@ def load_player_data():
 @st.cache_data(ttl="1d")    
 def return_df(f):        
     try:
-        df = pd.read_csv(f)
-    except:
-        st.write("Could not read file"+f)
-        e = sys.exc_info()
-        st.error(e)
-    return df.copy()
+        try:
+            df = pd.read_csv(f, encoding="utf-8")
+        except UnicodeDecodeError:
+            df = pd.read_csv(f, encoding="latin-1")
+        return df.copy()
+    except Exception:
+        st.write("Could not read file " + f)
+        st.error(sys.exc_info())
+        return pd.DataFrame()
 
 @st.cache_data(ttl="1d")    
 def return_combined_matchdf(del_df,match_df):        
@@ -70,18 +72,29 @@ def return_combined_matchdf(del_df,match_df):
         comb_df = pd.merge(del_df, match_df, on = 'id', how='left')
         comb_df.rename(columns = {'id':'match_id'}, inplace = True)                  
         comb_df= replaceTeamNames(comb_df)
-    except:
+        return comb_df
+    except Exception:
         st.write("Could not combine match and delivery dataframe")
-        e = sys.exc_info()
-        st.error(e)
-    return comb_df   
+        st.error(sys.exc_info())
+        return pd.DataFrame()
 
 #@st.cache_data(ttl=3600*24,show_spinner=True)
 @st.cache_data(ttl="1d")
 def getBatsmanList(df):    
-    batsman_list = df['display_name'].unique()   
-    #st.table(batsman_list)    
-    return sorted(batsman_list)
+    # Check if display_name exists, if not return batsman names
+    if 'display_name' not in df.columns:
+        return sorted(df['batsman'].unique())
+        
+    # Get all unique batsmen with their display names
+    batsman_df = df[['batsman', 'display_name']].drop_duplicates()
+    missing_names = batsman_df[batsman_df['display_name'].isna()]['batsman'].unique()
+    
+    if len(missing_names) > 0:
+        st.warning("⚠️ Players missing display names in Player Profile:")
+        st.table(pd.DataFrame({'Player Name': missing_names}))
+    
+    # Return either display_name if available, otherwise batsman name
+    return sorted(df['display_name'].dropna().unique())
 
 def getPlayerName(player,player_df):    
     df = player_df[(player_df.display_name == player)].reset_index()    
@@ -90,10 +103,20 @@ def getPlayerName(player,player_df):
 #@st.cache_data(ttl=3600*24,show_spinner=True)
 @st.cache_data(ttl="1d")    
 def getBowlerList(df):    
-    #comb_df = df[df['display_name'].isnull()]
-    #st.table(comb_df['bowler'].unique())
-    bowler_list = df['display_name'].unique()    
-    return sorted(bowler_list)
+    # Check if display_name exists, if not return bowler names
+    if 'display_name' not in df.columns:
+        return sorted(df['bowler'].unique())
+        
+    # Get all unique bowlers with their display names
+    bowler_df = df[['bowler', 'display_name']].drop_duplicates()
+    missing_names = bowler_df[bowler_df['display_name'].isna()]['bowler'].unique()
+    
+    if len(missing_names) > 0:
+        st.warning("⚠️ Players missing display names in Player Profile:")
+        st.table(pd.DataFrame({'Player Name': missing_names}))
+    
+    # Return either display_name if available, otherwise bowler name
+    return sorted(df['display_name'].dropna().unique())
 
 #@st.cache_data(ttl=3600*24,show_spinner=True)
 @st.cache_data(ttl="1d")    
